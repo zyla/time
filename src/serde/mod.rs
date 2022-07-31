@@ -165,9 +165,9 @@ impl Serialize for OffsetDateTime {
             self.minute(),
             self.second(),
             self.nanosecond(),
-            self.offset.whole_hours(),
-            self.offset.minutes_past_hour(),
-            self.offset.seconds_past_minute(),
+            self.offset().whole_hours(),
+            self.offset().minutes_past_hour(),
+            self.offset().seconds_past_minute(),
         )
             .serialize(serializer)
     }

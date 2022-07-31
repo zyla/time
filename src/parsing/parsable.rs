@@ -2,12 +2,13 @@
 
 use core::ops::Deref;
 
+use crate::date_time::MaybeOffset;
 use crate::error::TryFromParsed;
 use crate::format_description::well_known::iso8601::EncodedConfig;
 use crate::format_description::well_known::{Iso8601, Rfc2822, Rfc3339};
 use crate::format_description::FormatItem;
 use crate::parsing::{Parsed, ParsedItem};
-use crate::{error, Date, Month, OffsetDateTime, PrimitiveDateTime, Time, UtcOffset, Weekday};
+use crate::{error, Date, DateTime, Month, Time, UtcOffset, Weekday};
 
 /// A type that can be parsed.
 #[cfg_attr(__time_03_docs, doc(notable_trait))]
@@ -22,7 +23,6 @@ impl<T: Deref> Parsable for T where T::Target: Parsable {}
 /// Seal the trait to prevent downstream users from implementing it, while still allowing it to
 /// exist in generic bounds.
 mod sealed {
-
     #[allow(clippy::wildcard_imports)]
     use super::*;
 
@@ -66,13 +66,11 @@ mod sealed {
             Ok(self.parse(input)?.try_into()?)
         }
 
-        /// Parse a [`PrimitiveDateTime`] from the format description.
-        fn parse_date_time(&self, input: &[u8]) -> Result<PrimitiveDateTime, error::Parse> {
-            Ok(self.parse(input)?.try_into()?)
-        }
-
-        /// Parse a [`OffsetDateTime`] from the format description.
-        fn parse_offset_date_time(&self, input: &[u8]) -> Result<OffsetDateTime, error::Parse> {
+        /// Parse a [`DateTime`] from the format description.
+        fn parse_date_time<O: MaybeOffset>(
+            &self,
+            input: &[u8],
+        ) -> Result<DateTime<O>, error::Parse> {
             Ok(self.parse(input)?.try_into()?)
         }
     }
@@ -272,7 +270,7 @@ impl sealed::Sealed for Rfc2822 {
         Ok(input)
     }
 
-    fn parse_offset_date_time(&self, input: &[u8]) -> Result<OffsetDateTime, error::Parse> {
+    fn parse_date_time<O: MaybeOffset>(&self, input: &[u8]) -> Result<DateTime<O>, error::Parse> {
         use crate::error::ParseFromDescription::{InvalidComponent, InvalidLiteral};
         use crate::parsing::combinator::rfc::rfc2822::{cfws, fws};
         use crate::parsing::combinator::{
@@ -409,7 +407,9 @@ impl sealed::Sealed for Rfc2822 {
         }
 
         let mut nanosecond = 0;
-        let leap_second_input = if second == 60 {
+        let leap_second_input = if !O::HAS_OFFSET {
+            false
+        } else if second == 60 {
             second = 59;
             nanosecond = 999_999_999;
             true
@@ -421,7 +421,11 @@ impl sealed::Sealed for Rfc2822 {
             let date = Date::from_calendar_date(year as _, month, day)?;
             let time = Time::from_hms_nano(hour, minute, second, nanosecond)?;
             let offset = UtcOffset::from_hms(offset_hour, offset_minute, 0)?;
-            Ok(date.with_time(time).assume_offset(offset))
+            Ok(DateTime {
+                date,
+                time,
+                offset: O::from_offset(offset),
+            })
         })()
         .map_err(TryFromParsed::ComponentRange)?;
 
@@ -547,7 +551,7 @@ impl sealed::Sealed for Rfc3339 {
         Ok(input)
     }
 
-    fn parse_offset_date_time(&self, input: &[u8]) -> Result<OffsetDateTime, error::Parse> {
+    fn parse_date_time<O: MaybeOffset>(&self, input: &[u8]) -> Result<DateTime<O>, error::Parse> {
         use crate::error::ParseFromDescription::{InvalidComponent, InvalidLiteral};
         use crate::parsing::combinator::{
             any_digit, ascii_char, ascii_char_ignore_case, exactly_n_digits, sign,
@@ -645,11 +649,13 @@ impl sealed::Sealed for Rfc3339 {
             false
         };
 
-        let dt = Month::from_number(month)
+        let date = Month::from_number(month)
             .and_then(|month| Date::from_calendar_date(year as _, month, day))
-            .and_then(|date| date.with_hms_nano(hour, minute, second, nanosecond))
-            .map(|date| date.assume_offset(offset))
             .map_err(TryFromParsed::ComponentRange)?;
+        let time = Time::from_hms_nano(hour, minute, second, nanosecond)
+            .map_err(TryFromParsed::ComponentRange)?;
+        let offset = O::from_offset(offset);
+        let dt = DateTime { date, time, offset };
 
         if leap_second_input && !dt.is_valid_leap_second_stand_in() {
             return Err(error::Parse::TryFromParsed(TryFromParsed::ComponentRange(

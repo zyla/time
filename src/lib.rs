@@ -282,6 +282,7 @@ macro_rules! const_try_opt {
 // endregion macros
 
 mod date;
+mod date_time;
 mod duration;
 pub mod error;
 pub mod ext;
@@ -317,6 +318,7 @@ pub mod util;
 mod weekday;
 
 pub use crate::date::Date;
+use crate::date_time::DateTime;
 pub use crate::duration::Duration;
 pub use crate::error::Error;
 #[cfg(feature = "std")]
