@@ -33,7 +33,7 @@ jobs:
     strategy:
       matrix:
         rust:
-          - { version: "1.59", name: MSRV }
+          - { version: "1.61", name: MSRV }
           - { version: stable, name: stable }
         target:
           - name: NetBSD
@@ -161,7 +161,7 @@ jobs:
     strategy:
       matrix:
         rust:
-          - { version: "1.59", name: MSRV }
+          - { version: "1.61", name: MSRV }
           - { version: stable, name: stable }
         os:
           - { name: Ubuntu, value: ubuntu-20.04 }
