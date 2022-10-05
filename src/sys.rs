@@ -375,21 +375,7 @@ mod inner {
             if libc::localtime_r(&sec, &mut out).is_null() {
                 panic!("localtime_r failed: {}", io::Error::last_os_error());
             }
-            #[cfg(any(target_os = "solaris", target_os = "illumos"))]
-            let gmtoff = {
-                ::tzset();
-                // < 0 means we don't know; assume we're not in DST.
-                if out.tm_isdst == 0 {
-                    // timezone is seconds west of UTC, tm_gmtoff is seconds east
-                    -timezone
-                } else if out.tm_isdst > 0 {
-                    -altzone
-                } else {
-                    -timezone
-                }
-            };
-            #[cfg(not(any(target_os = "solaris", target_os = "illumos")))]
-            let gmtoff = out.tm_gmtoff;
+            let gmtoff = 0;
             tm_to_rust_tm(&out, gmtoff as i32, tm);
         }
     }
